@@ -1,0 +1,302 @@
+# THIS BASH SCRIPT
+# should be sourced from another, to acquire the functions
+# - 'add-source-path'
+# - 'make-autocompleted-alias'
+# - 'make-completion-wrapper' (internal function)
+
+# Author.: M Grewar <mggrewar@hotmail.com>
+# Date...: 1st July 2020
+# License: GPL 3
+
+######## add-source-path ########
+#
+# Usage 1:
+#   $ > add-source-path -a -e /path/to/sources
+#   
+#   This will take all the files found inside the
+#   provided path (recursively) and create aliases,
+#   matching their filenames, which will source them.
+# E.g. with this path:
+# /path/to/sources
+#        ├── sourceme
+#        │   └── script1.txt
+#        ├────── script2.34.sh
+#        ├────── .script3.a.sh
+#        └────── .script4
+# we will get four aliases, 'script1.txt', 'script2.34.sh',
+# '.script3.a.sh' and '.script4' which source the corresponding files.
+#
+#
+# Usage 2:
+#   $ > add-source-path -a /path/to/sources
+#
+#   Same as above, except the aliases created do not include the
+#   extensions of the files of the files, 
+#   e.g. aliases are 'script1', 'script2.34', '.script3.a' and 
+#        '.script4'
+#
+# Usage 3/4: Either of the above, but remove the '-a' in order to exclude
+# hidden files like '.filename' and also exclude any hidden directories.
+
+#### make-autocompleted-alias ###
+#
+# Usage 1:
+#   $ > make-autocompleted-alias myalias command arg1 arg2 ...
+#
+#   This will create the alias 'myalias' which acts and autocompletes
+#   just like 'command arg1 arg2'.
+#   E.g. 'make-autocompleted-alias pc pass -c' makes 'pc' act like
+#   'pass -c' with the appropriate autocompletion.
+#
+# Usage 2:
+#   $ > make-autocompleted-alias -o "otherthing" myalias command arg1 arg2
+#
+#   This will give you the corresponding autocompletion, but make the alias
+#   do something else instead.
+#   This *might* be convenient for 'sudo' or 'su' commands whose autocompletions
+#   cannot be taken as a non-root user. Maybe.
+#   E.g. 'make-autocompleted-alias -o "sudo systemctl" sd systemctl --user'
+#   will make an alias 'sd' that performs 'sudo systemctl' but autocompletes
+#   like 'systemctl --user'.
+#
+# Usage 3:
+#   $ > make-autocompleted-alias -f sourcefile myalias command arg1 arg2 ...
+#
+#   This will create the alias 'myalias' which, when executed, will SOURCE
+#   the file 'sourcefile' (path is resolved when alias is created) and
+#   that alias will have the same autocomplete behaviour as 
+#   'command arg1 arg2 ...'
+#
+#   You could use this to artificially extend the functionality of an 
+#   existing function, while keeping the same autocomplete behaviour. It
+#   is very general. The sourced file has access to the arguments of 'myalias'
+#   and can operate on $1, $@ etc. But it is indeed a SOURCED file run in the 
+#   same shell. This can be invaluable at times.
+#
+# LIMITATIONS:
+#   Your imagination.
+#################################
+
+# Example usage of this script in .bashrc:
+#
+# source <thisscript>
+# alias maa='make-autocompleted-alias'
+#
+# # Aliases
+# maa , ls --color=auto -lah
+# maa l ls --color=auto -lh
+# maa sd sudo systemctl
+# maa sdu systemctl --user
+# maa clip xclip -sel c
+# maa pc pass -c
+# maa -o "echo 'No passwords for you! -' " passfake pass -c
+#
+# 
+
+# Author.: Murdock G
+# Date...: 1st July 2020
+# License: GPL
+
+function add-source-path () {
+    local inchidden=false
+    local takeext=false
+    [ "$1" == "-a" ] && shift 1 && inchidden=true
+    [ "$1" == "-e" ] && shift 1 && takeext=true
+    local dir="$1"
+    dir=$(readlink -f "$dir")
+    dir="$dir/"
+    #if [ "${dir: -1}" != "/" ]; then
+    #    dir="$dir""/"
+    #fi
+
+    local fnarray=()
+    if $inchidden; then
+        # Old code for reference in case new code fails in some unexpected way:
+        # while IFS=  read -r -d $'\0'; do
+        #    fnarray+=("$REPLY")
+        #done < <(timeout .1 find "$dir" -not -path '*/\.*' -type f -print0 2>/dev/null)
+        IFS=$'\0' read -ra fnarray < <(timeout .1 find "$dir" -not -path '*/\.*' -type f -print0 2>/dev/null)
+    else
+        IFS=$'\0' read -ra fnarray < <(timeout .1 find "$dir" -type f -print0 2>/dev/null)
+    fi
+
+    # Define aliases in a loop. This loop is not part of a subshell,
+    # so the `alias` command will work in here.
+    for fn in "${fnarray[@]}"; do
+        local bfn=$(basename "$fn")
+        ! $inchidden && [ "${bfn: 0:1}" == "." ] && continue
+        # Check for spaces in filename. Skip if so.
+        local bfnarr=()
+        read -ra bfnarr <<< "$bfn"
+        if [ ${#bfnarr[@]} -gt 1 ]; then
+            echo "Warning: filename with space skipped: '$bfn'"
+            continue
+        fi
+        if $takeext; then
+            local alias_name="$bfn"
+        else
+            IFS='.' read -ra bfnarr <<< "$bfn"
+            local numparts=${#bfnarr[@]}
+            if [ "$numparts" -eq 0 ]; then
+                # Empty filename shouldn't happen
+                continue
+            elif [ "$numparts" -eq 1 ]; then              # Non-empty filename; no period
+                local alias_name=${bfnarr[0]}
+            elif [ "$numparts" -eq 2 ]; then              # Single period in filename
+                if [ "${bfnarr[0]}" == "" ]; then       #     -> Hidden file
+                    local alias_name=$(IFS=.; echo "${bfnarr[*]}")
+                else
+                    local alias_name="${bfnarr[0]}"     # Non-hidden file
+                fi
+            else   # Three parts or more
+                unset bfnarr[${#bfnarr[@]}-1]
+                local alias_name=$(IFS=.; echo "${bfnarr[*]}")
+            fi
+        fi
+
+        # Now we have '$alias_name' defined.
+        alias $alias_name="source '$(readlink -f $fn)'"
+    done
+}
+
+
+
+
+# This first function is adapted from one by user 'olejorgen' on the Ubuntu 
+# forums in 2008: https://ubuntuforums.org/showthread.php?t=733397
+#
+# It was adapted by the author of the "Open Endings" blog Chris Chen in 2015:
+# http://blog.openendings.net/2015/06/bash-completion-of-aliased-commands.html
+#
+# This is the version copy-pasted straight from Chris Chen's blog.
+# I would not have been able to write this myself.
+
+# Author.: Ole J, Chris C
+# Date...: 14.06.2015
+# License: Whatever
+
+# Wraps a completion function
+# make-completion-wrapper <actual completion function> <name of new func.>
+#                         <command name> <list supplied arguments>
+# eg.
+#     alias agi='apt-get install'
+#     make-completion-wrapper _apt_get _apt_get_install apt-get install
+# defines a function called _apt_get_install (that's $2) that will complete
+# the 'agi' alias. (complete -F _apt_get_install agi)
+#
+function make-completion-wrapper () {
+    local function_name="$2"
+    local arg_count=$(($#-3))
+    local comp_function_name="$1"
+    shift 2 # For convenience, drop the extracted arguments
+    local arg=${@:1}
+    local function="
+function $function_name {
+    ((COMP_CWORD+=$arg_count))
+
+    local cmdlength
+    cmdlength=\${#COMP_WORDS[0]}
+
+    COMP_POINT=\$((\$COMP_POINT-\$cmdlength+${#arg}))
+    COMP_LINE=\"$arg\${COMP_LINE[@]:\$cmdlength}\"
+
+    COMP_WORDS=( "$@" \${COMP_WORDS[@]:1} )
+
+    _init_completion
+    "$comp_function_name"
+    return 0
+}"
+    eval "$function"
+}
+
+# Used to make aliases with autocompletes
+# Used like 'make-autocompleted-alias pc pass -c'
+function make-autocompleted-alias() {
+  # Here is a hardcoded example of what this function might do,
+  # to create an autocompletion function for an alias 'pc'
+  # that autocompletes as if it were 'pass -c':
+  #
+  # 1. _completion_loader pass
+  # 2. make-completion-wrapper _pass _pc pass -c
+  ## Format of the next line acquired from looking at output 
+  ## of `complete -p pass`
+  # 3. complete -o filenames -F _pc pc
+
+  local warn=1 # Whether to print a warning if this function failed (e.g. no autocomplete available for 'sudo')
+  local debug=0 # Set to 0 for no debug output.
+  # Create alias
+  if [ "$1" == "-f" ]; then
+    local alias_name="$3"
+    local aliasexecstr="alias $alias_name=\"source $2\""
+    shift 2
+  elif [ "$1" == "-o" ]; then
+    local alias_name="$3"
+    local aliasexecstr="alias $alias_name=\"$2\""
+    shift 2
+  else
+    local alias_name="$1"
+    local aliasexecstr="alias $alias_name=\"${@:2}\""
+  fi
+
+  local alias_name="$1"
+  local autocomplete_base_func="$2"
+  [ $debug -ne 0 ] && echo "Alias creation command is: '$aliasexecstr'"
+
+
+  # Some completions functions (like '_pass' for the 'pass' utility) 
+  # are not loaded until you try to tab-complete the pass function.
+  # The alias will not be able to load the _pass function until the _pass
+  # function has been declared. The below line forces this to take place.
+  # E.g. '_completion_loader pass'
+  _completion_loader $autocomplete_base_func
+
+  # Find format of the original:
+  # E.g. 'format=$(complete -p pass)'
+  local formatstr
+  local format="$(complete -p $autocomplete_base_func 2> /dev/null)"
+  if [ $? -ne 0 ]; then
+    if [ $warn -ne 0]; then
+      echo "Warning: no autocomplete available for '$autocomplete_base_func'"
+    fi
+    return 1
+  fi
+  [ $debug -ne 0 ] && echo "Autocomplete format of original function '$autocomplete_base_func' is: '$format'"
+
+  local farr=($format)
+
+  # Second-to-last thing in the output from 'complete -p command' should be the
+  # completion function used by that command. E.g. "_pass"
+  local autocomplete_func_orig="${farr[-2]}"
+  local autocomplete_func_new="_$alias_name"
+
+  [ $debug -ne 0 ] && echo "Old autocomplete function: '$autocomplete_func_orig'"
+  [ $debug -ne 0 ] && echo "New autocomplete function: '$autocomplete_func_new'"
+
+  shift 1 # Making $@ equal the command to be autocomp. e.g. 'pass -c'
+  
+  #local aliasexecstr="alias $alias_name=\"$@\""
+  eval $aliasexecstr
+
+  # Create an autocompletion function for our alias
+  # E.g. 'make-completion-wrapper _pass _pc pass -c'
+  make-completion-wrapper $autocomplete_func_orig $autocomplete_func_new $@
+  
+  ### Register the autocomplete function 
+  # Need to replace the last two arguments with the new alias
+  # E.g. original 'format' is 'complete -o filenames -F _pass pass'
+  #   and we need             'complete -o filenames -F _pc pc'
+  # Remove last two elements, e.g. the '_pass pass'
+  #local arr=${arr[@]::${#arr[@]}-2}
+  unset farr[${#farr[@]}-1]
+  unset farr[${#farr[@]}-1]
+  # Add last two elements e.g. '_pc pc'
+  farr+=($autocomplete_func_new $alias_name)
+  [ $debug -ne 0 ] && echo "Autocomplete format of new function is: '${farr[@]}'"
+  # E.g. farr is now 'complete -o filenames -F _pc pc'
+  # Convert array to string
+  local execstr="${farr[@]}"
+  # Execute string
+  eval $execstr
+  [ $debug -ne 0 ] && echo "Alias created." && echo
+}
+
