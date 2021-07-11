@@ -49,13 +49,13 @@
 #   'pass -c' with the appropriate autocompletion.
 #
 # Usage 2:
-#   $ > make-autocompleted-alias -o "otherthing" myalias command arg1 arg2
+#   $ > make-autocompleted-alias -o 'otherthing' myalias command arg1 arg2
 #
 #   This will give you the corresponding autocompletion, but make the alias
 #   do something else instead.
 #   This *might* be convenient for 'sudo' or 'su' commands whose autocompletions
 #   cannot be taken as a non-root user. Maybe.
-#   E.g. 'make-autocompleted-alias -o "sudo systemctl" sd systemctl --user'
+#   E.g. 'make-autocompleted-alias -o 'sudo systemctl' sd systemctl --user'
 #   will make an alias 'sd' that performs 'sudo systemctl' but autocompletes
 #   like 'systemctl --user'.
 #
@@ -89,7 +89,7 @@
 # maa sdu systemctl --user
 # maa clip xclip -sel c
 # maa pc pass -c
-# maa -o "echo 'No passwords for you! -' " passfake pass -c
+# maa -o 'echo "No passwords for you! -"' passfake pass -c
 #
 # 
 
