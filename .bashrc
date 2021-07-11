@@ -13,8 +13,8 @@ alias maa='make-autocompleted-alias'
 maa vim nvim
 maa v nvim
 # ls
-maa , ls --color=always -lah
-maa l ls --color=always -lh
+maa , ls --color=auto -lah --group-directories-first
+maa l ls --color=auto -lh  --group-directories-first
 # redshift
 maa rs redshift -O 3000 -b 0.75
 maa rx redshift -x
