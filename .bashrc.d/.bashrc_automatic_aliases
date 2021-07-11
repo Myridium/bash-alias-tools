@@ -231,7 +231,7 @@ function make-autocompleted-alias() {
     shift 2
   elif [ "$1" == "-o" ]; then
     local alias_name="$3"
-    local aliasexecstr="alias $alias_name=\"$2\""
+    local aliasexecstr="alias $alias_name='$2'"
     shift 2
   else
     local alias_name="$1"
@@ -255,7 +255,7 @@ function make-autocompleted-alias() {
   local formatstr
   local format="$(complete -p $autocomplete_base_func 2> /dev/null)"
   if [ $? -ne 0 ]; then
-    if [ $warn -ne 0]; then
+    if [ $warn -ne 0 ]; then
       echo "Warning: no autocomplete available for '$autocomplete_base_func'"
     fi
     return 1
@@ -298,5 +298,6 @@ function make-autocompleted-alias() {
   # Execute string
   eval $execstr
   [ $debug -ne 0 ] && echo "Alias created." && echo
+  return 0
 }
 
