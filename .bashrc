@@ -1,3 +1,16 @@
+## Hotfix to enable bash autocompletion in Debian-based systems. Needs bash-completion installed.
+# This should be enabled by default. 
+# Taken from default Debian .bashrc at /etc/bash.bashrc
+## enable bash completion in interactive shells
+if ! shopt -oq posix; then
+  if [ -f /usr/share/bash-completion/bash_completion ]; then
+    . /usr/share/bash-completion/bash_completion
+  elif [ -f /etc/bash_completion ]; then
+    . /etc/bash_completion
+  fi
+fi
+
+
 # Loads the 'make-autocompleted-alias' function.
 # and the 'add-source-path' function.
 source ~/.bashrc.d/.bashrc_automatic_aliases
